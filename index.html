@@ -2,15 +2,49 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Simple RTS Game</title>
+    <title>Ten Engineers</title>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <style>
-        body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { border: 1px solid #fff; }
+        body { margin: 0; background: #000; color: #fff; font-family: monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 1px solid #fff; display: none; }
+        #menu { text-align: center; white-space: pre; font-size: 16px; }
+        #startButton { margin-top: 20px; padding: 10px 20px; background: #fff; color: #000; border: none; cursor: pointer; }
+        #startButton:hover { background: #ccc; }
     </style>
 </head>
 <body>
+    <div id="menu">
+        <pre>
+        ======================================
+        |          TEN ENGINEERS RTS         |
+        ======================================
+        |                                    |
+        |       .-""""""""-""""""""-.       |
+        |     .'          |          '.     |
+        |    /   ____     |     ____   \    |
+        |   : , |    |    |    |    | , :   |
+        |    `._|    |____|____|    |_.'    |
+        |       |   Engineer    |            |
+        |       |               |            |
+        |       `._          _.'             |
+        |          `"'"""""'"`               |
+        |                                    |
+        ======================================
+        |  Build factories, mine ore, fight! |
+        |  Left-click: Move engineers        |
+        |  Right-click: Build factory (2000) |
+        |  Win by destroying enemy engineers |
+        ======================================
+        </pre>
+        <button id="startButton">Start Game</button>
+    </div>
+
     <script>
+        // Check if Phaser loaded
+        if (typeof Phaser === 'undefined') {
+            document.body.innerHTML = '<h1 style="color: #fff;">Error: Phaser failed to load. Check your internet or CDN.</h1>';
+        }
+
         const config = {
             type: Phaser.AUTO,
             width: 800,
@@ -23,28 +57,31 @@
             physics: {
                 default: 'arcade',
                 arcade: { debug: false }
-            }
+            },
+            parent: 'gameContainer' // Optional: specify a container if needed
         };
 
-        const game = new Phaser.Game(config);
-        let player, enemy, playerCredits = 10000, enemyCredits = 10000;
+        let game, player, enemy, playerCredits = 10000, enemyCredits = 10000;
         let playerEngineers = [], enemyEngineers = [], playerFactories = [], enemyFactories = [];
         let playerUnits = [], enemyUnits = [];
         let ores = [];
+
+        // Menu Logic
+        document.getElementById('startButton').addEventListener('click', () => {
+            document.getElementById('menu').style.display = 'none';
+            document.getElementsByTagName('canvas')[0].style.display = 'block';
+            game = new Phaser.Game(config);
+        });
 
         function preload() {
             this.load.image('bullet', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAHElEQVQIW2NkYGD4z8DAwMgABXAG5z8DOQAAAK8DL//oQfQAAAAASUVORK5CYII=');
         }
 
         function create() {
-            // Background
             this.add.rectangle(400, 300, 800, 600, 0x4a4a4a);
-
-            // UI
             player = { creditsText: this.add.text(10, 10, `Credits: ${playerCredits}`, { color: '#fff' }) };
             enemy = { creditsText: this.add.text(10, 30, `Enemy Credits: ${enemyCredits}`, { color: '#fff' }) };
 
-            // Spawn Engineers (Yellow Blocks)
             for (let i = 0; i < 10; i++) {
                 let eng = this.add.rectangle(50 + i * 30, 500, 20, 20, 0xffff00);
                 eng.health = 50;
@@ -57,31 +94,23 @@
                 enemyEngineers.push(enemyEng);
             }
 
-            // Ore Patches
             for (let i = 0; i < 5; i++) {
                 let ore = this.add.rectangle(Phaser.Math.Between(200, 600), Phaser.Math.Between(200, 400), 30, 30, 0xaaaaaa);
                 ore.resource = 1000;
                 ores.push(ore);
             }
 
-            // Mouse Input
             this.input.on('pointerdown', (pointer) => handleClick.call(this, pointer));
         }
 
         function update() {
-            // Engineer Mining
             playerEngineers.forEach(eng => mineOre.call(this, eng, 'player'));
             enemyEngineers.forEach(eng => mineOre.call(this, eng, 'enemy'));
-
-            // Unit Combat
             playerUnits.forEach(unit => fireBullet.call(this, unit, enemyUnits.concat(enemyEngineers)));
             enemyUnits.forEach(unit => fireBullet.call(this, unit, playerUnits.concat(playerEngineers)));
-
-            // Factory Production
             playerFactories.forEach(factory => produceUnit.call(this, factory, 'player'));
             enemyFactories.forEach(factory => produceUnit.call(this, factory, 'enemy'));
 
-            // Check Game Over
             if (playerEngineers.length === 0) endGame('Enemy Wins!');
             if (enemyEngineers.length === 0) endGame('Player Wins!');
         }
@@ -90,7 +119,6 @@
             let selected = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x, pointer.y) < 20);
             if (selected) {
                 if (pointer.rightButtonDown()) {
-                    // Build Factory (Costs 2000 credits)
                     if (playerCredits >= 2000) {
                         let factory = this.add.rectangle(selected.x, selected.y, 40, 40, 0x00ff00);
                         factory.health = 200;
@@ -101,7 +129,6 @@
                         player.creditsText.setText(`Credits: ${playerCredits}`);
                     }
                 } else {
-                    // Move to Ore or Position
                     let targetOre = ores.find(ore => Phaser.Math.Distance.Between(ore.x, ore.y, pointer.x, pointer.y) < 30);
                     selected.target = targetOre || { x: pointer.x, y: pointer.y };
                 }
