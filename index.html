@@ -36,7 +36,7 @@
         |  Right-click: Deselect units       |
         |  Right-click engineer: Factory(2000)|
         |  Win by destroying enemy engineers |
-        |  Hover edges to scroll map (Esc to unlock cursor) |
+        |  Move mouse to edges to scroll map (Esc to unlock cursor) |
         ======================================
         </pre>
         <button id="startButton">Start Game</button>
@@ -66,7 +66,7 @@
         let playerEngineers = [], enemyEngineers = [], playerFactories = [], enemyFactories = [];
         let playerUnits = [], enemyUnits = [], selectedUnits = [];
         let ores = [], selectionBox = null;
-        let camera, isCursorLocked = false;
+        let camera, isCursorLocked = false, cursorGraphic = null;
 
         document.getElementById('startButton').addEventListener('click', () => {
             document.getElementById('menu').style.display = 'none';
@@ -114,11 +114,17 @@
             }
 
             this.input.on('pointerdown', (pointer) => handleClick.call(this, pointer));
+            this.input.on('pointerup', (pointer) => handlePointerUp.call(this, pointer));
+            this.input.on('pointermove', (pointer) => handlePointerMove.call(this, pointer));
 
             // Add keyboard input for Esc to unlock cursor
             this.input.keyboard.on('keydown-ESC', () => {
                 unlockCursor();
             });
+
+            // Create a visible cursor graphic (white square)
+            cursorGraphic = this.add.rectangle(0, 0, 10, 10, 0xffffff);
+            cursorGraphic.setScrollFactor(0); // Keep cursor fixed to screen
         }
 
         function update() {
@@ -126,7 +132,11 @@
             const scrollSpeed = 10;
 
             if (isCursorLocked) {
-                // Use pointer position within the canvas for scrolling
+                // Update cursor graphic position
+                cursorGraphic.x = this.input.activePointer.x;
+                cursorGraphic.y = this.input.activePointer.y;
+
+                // Scroll based on mouse position near edges
                 if (this.input.activePointer.x < edgeThreshold) {
                     camera.scrollX -= scrollSpeed;
                 } else if (this.input.activePointer.x > config.width - edgeThreshold) {
@@ -167,48 +177,56 @@
 
         function handleClick(pointer) {
             if (isCursorLocked) {
-                if (pointer.leftButtonDown()) {
-                    if (!selectionBox) {
-                        selectionBox = this.add.rectangle(pointer.x + camera.scrollX, pointer.y + camera.scrollY, 1, 1, 0x0000ff, 0.5);
-                        selectionBox.isSelecting = true;
-                    } else if (selectionBox.isSelecting) {
-                        let x1 = selectionBox.x, y1 = selectionBox.y;
-                        let x2 = pointer.x + camera.scrollX, y2 = pointer.y + camera.scrollY;
-                        let minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-                        let minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-
-                        selectedUnits = [...playerUnits, ...playerEngineers].filter(entity => {
-                            return entity.x >= minX && entity.x <= maxX && entity.y >= minY && entity.y <= maxY;
-                        });
-
-                        selectionBox.destroy();
-                        selectionBox = null;
-                    } else {
-                        if (selectedUnits.length > 0) {
-                            let target = { x: pointer.x + camera.scrollX, y: pointer.y + camera.scrollY };
-                            selectedUnits.forEach(entity => {
-                                entity.target = target;
-                            });
-                        }
-                    }
-                } else if (pointer.rightButtonDown()) {
-                    selectedUnits = [];
-                    if (selectionBox) {
-                        selectionBox.destroy();
-                        selectionBox = null;
-                    }
-
-                    let selectedEng = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x + camera.scrollX, pointer.y + camera.scrollY) < 20);
-                    if (selectedEng && playerCredits >= 2000) {
-                        let factory = this.add.rectangle(selectedEng.x, selectedEng.y, 40, 40, 0xd3d3a4); // Grey-Yellowish
-                        factory.health = 200;
-                        factory.team = 'player';
-                        factory.lastSpawn = 0;
-                        playerFactories.push(factory);
-                        playerCredits -= 2000;
-                        player.creditsText.setText(`Credits: ${playerCredits}`);
-                    }
+                if (pointer.leftButtonDown() && !selectionBox) {
+                    selectionBox = this.add.rectangle(pointer.x + camera.scrollX, pointer.y + camera.scrollY, 1, 1, 0x0000ff, 0.5);
+                    selectionBox.isSelecting = true;
+                } else if (!pointer.leftButtonDown() && selectedUnits.length > 0) {
+                    let target = { x: pointer.x + camera.scrollX, y: pointer.y + camera.scrollY };
+                    selectedUnits.forEach(entity => {
+                        entity.target = target;
+                    });
                 }
+            } else if (pointer.rightButtonDown()) {
+                selectedUnits = [];
+                if (selectionBox) {
+                    selectionBox.destroy();
+                    selectionBox = null;
+                }
+
+                let selectedEng = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x + camera.scrollX, pointer.y + camera.scrollY) < 20);
+                if (selectedEng && playerCredits >= 2000) {
+                    let factory = this.add.rectangle(selectedEng.x, selectedEng.y, 40, 40, 0xd3d3a4); // Grey-Yellowish
+                    factory.health = 200;
+                    factory.team = 'player';
+                    factory.lastSpawn = 0;
+                    playerFactories.push(factory);
+                    playerCredits -= 2000;
+                    player.creditsText.setText(`Credits: ${playerCredits}`);
+                }
+            }
+        }
+
+        function handlePointerUp(pointer) {
+            if (isCursorLocked && selectionBox && selectionBox.isSelecting) {
+                let x1 = selectionBox.x, y1 = selectionBox.y;
+                let x2 = this.input.activePointer.x + camera.scrollX, y2 = this.input.activePointer.y + camera.scrollY;
+                let minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+                let minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+
+                selectedUnits = [...playerUnits, ...playerEngineers].filter(entity => {
+                    return entity.x >= minX && entity.x <= maxX && entity.y >= minY && entity.y <= maxY;
+                });
+
+                selectionBox.destroy();
+                selectionBox = null;
+            }
+        }
+
+        function handlePointerMove(pointer) {
+            if (isCursorLocked) {
+                // Update cursor graphic position (already handled in update, but keeping for redundancy)
+                cursorGraphic.x = pointer.x;
+                cursorGraphic.y = pointer.y;
             }
         }
 
@@ -298,7 +316,7 @@
         function endGame(message) {
             this.add.text(800, 600, message, { fontSize: '32px', color: '#fff' }).setOrigin(0.5);
             this.scene.pause();
-            unlockCursor(); gi
+            unlockCursor();
         }
 
         function lockCursor(canvas) {
