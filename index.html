@@ -31,8 +31,10 @@
         |                                    |
         ======================================
         |  Build factories, mine ore, fight! |
-        |  Left-click: Move engineers        |
-        |  Right-click: Build factory (2000) |
+        |  Left-click: Drag to select units  |
+        |  Left-click again: Move selected   |
+        |  Right-click: Deselect units       |
+        |  Right-click engineer: Factory(2000)|
         |  Win by destroying enemy engineers |
         ======================================
         </pre>
@@ -46,8 +48,8 @@
 
         const config = {
             type: Phaser.AUTO,
-            width: 800,
-            height: 600,
+            width: 1600, 
+            height: 1200, 
             scene: {
                 preload: preload,
                 create: create,
@@ -61,8 +63,8 @@
 
         let game, player, enemy, playerCredits = 10000, enemyCredits = 10000;
         let playerEngineers = [], enemyEngineers = [], playerFactories = [], enemyFactories = [];
-        let playerUnits = [], enemyUnits = [];
-        let ores = [];
+        let playerUnits = [], enemyUnits = [], selectedUnits = []; 
+        let ores = [], selectionBox = null;
 
         document.getElementById('startButton').addEventListener('click', () => {
             document.getElementById('menu').style.display = 'none';
@@ -81,24 +83,26 @@
         }
 
         function create() {
-            this.add.rectangle(400, 300, 800, 600, 0x4a4a4a);
+            this.add.rectangle(800, 600, 1600, 1200, 0x006400);
+
+            // UI
             player = { creditsText: this.add.text(10, 10, `Credits: ${playerCredits}`, { color: '#fff' }) };
             enemy = { creditsText: this.add.text(10, 30, `Enemy Credits: ${enemyCredits}`, { color: '#fff' }) };
 
             for (let i = 0; i < 10; i++) {
-                let eng = this.add.rectangle(50 + i * 30, 500, 20, 20, 0xffff00);
+                let eng = this.add.rectangle(100 + i * 60, 1100, 20, 20, 0xffff00); 
                 eng.health = 50;
                 eng.team = 'player';
                 playerEngineers.push(eng);
 
-                let enemyEng = this.add.rectangle(50 + i * 30, 100, 20, 20, 0xffff00);
+                let enemyEng = this.add.rectangle(100 + i * 60, 100, 20, 20, 0xff0000); 
                 enemyEng.health = 50;
                 enemyEng.team = 'enemy';
                 enemyEngineers.push(enemyEng);
             }
 
-            for (let i = 0; i < 5; i++) {
-                let ore = this.add.rectangle(Phaser.Math.Between(200, 600), Phaser.Math.Between(200, 400), 30, 30, 0xaaaaaa);
+            for (let i = 0; i < 10; i++) { 
+                let ore = this.add.rectangle(Phaser.Math.Between(200, 1400), Phaser.Math.Between(200, 1000), 30, 30, 0x8b4513);
                 ore.resource = 1000;
                 ores.push(ore);
             }
@@ -107,10 +111,22 @@
         }
 
         function update() {
+            if (selectionBox) {
+                selectionBox.setSize(this.input.activePointer.x - selectionBox.x, this.input.activePointer.y - selectionBox.y);
+            }
+
             playerEngineers.forEach(eng => mineOre.call(this, eng, 'player'));
             enemyEngineers.forEach(eng => mineOre.call(this, eng, 'enemy'));
-            playerUnits.forEach(unit => fireBullet.call(this, unit, enemyUnits.concat(enemyEngineers)));
-            enemyUnits.forEach(unit => fireBullet.call(this, unit, playerUnits.concat(playerEngineers)));
+
+            playerUnits.forEach(unit => {
+                fireBullet.call(this, unit, enemyUnits.concat(enemyEngineers));
+                if (selectedUnits.includes(unit)) drawSelectionOutline.call(this, unit, 0x0000ff); // Blue outline for selected
+            });
+            enemyUnits.forEach(unit => {
+                fireBullet.call(this, unit, playerUnits.concat(playerEngineers));
+                if (selectedUnits.includes(unit)) drawSelectionOutline.call(this, unit, 0x0000ff); // Blue outline for selected
+            });
+
             playerFactories.forEach(factory => produceUnit.call(this, factory, 'player'));
             enemyFactories.forEach(factory => produceUnit.call(this, factory, 'enemy'));
 
@@ -119,21 +135,46 @@
         }
 
         function handleClick(pointer) {
-            let selected = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x, pointer.y) < 20);
-            if (selected) {
-                if (pointer.rightButtonDown()) {
-                    if (playerCredits >= 2000) {
-                        let factory = this.add.rectangle(selected.x, selected.y, 40, 40, 0x00ff00);
-                        factory.health = 200;
-                        factory.team = 'player';
-                        factory.lastSpawn = 0;
-                        playerFactories.push(factory);
-                        playerCredits -= 2000;
-                        player.creditsText.setText(`Credits: ${playerCredits}`);
-                    }
+            if (pointer.leftButtonDown()) {
+                if (!selectionBox) {
+                    selectionBox = this.add.rectangle(pointer.x, pointer.y, 1, 1, 0x0000ff, 0.5);
+                    selectionBox.isSelecting = true;
+                } else if (selectionBox.isSelecting) {
+                    let x1 = selectionBox.x, y1 = selectionBox.y;
+                    let x2 = pointer.x, y2 = pointer.y;
+                    let minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+                    let minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+
+                    selectedUnits = [...playerUnits, ...playerEngineers].filter(entity => {
+                        return entity.x >= minX && entity.x <= maxX && entity.y >= minY && entity.y <= maxY;
+                    });
+
+                    selectionBox.destroy();
+                    selectionBox = null;
                 } else {
-                    let targetOre = ores.find(ore => Phaser.Math.Distance.Between(ore.x, ore.y, pointer.x, pointer.y) < 30);
-                    selected.target = targetOre || { x: pointer.x, y: pointer.y };
+                    if (selectedUnits.length > 0) {
+                        let target = { x: pointer.x, y: pointer.y };
+                        selectedUnits.forEach(entity => {
+                            entity.target = target;
+                        });
+                    }
+                }
+            } else if (pointer.rightButtonDown()) {
+                selectedUnits = [];
+                if (selectionBox) {
+                    selectionBox.destroy();
+                    selectionBox = null;
+                }
+
+                let selectedEng = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x, pointer.y) < 20);
+                if (selectedEng && playerCredits >= 2000) {
+                    let factory = this.add.rectangle(selectedEng.x, selectedEng.y, 40, 40, 0xd3d3a4); 
+                    factory.health = 200;
+                    factory.team = 'player';
+                    factory.lastSpawn = 0;
+                    playerFactories.push(factory);
+                    playerCredits -= 2000;
+                    player.creditsText.setText(`Credits: ${playerCredits}`);
                 }
             }
         }
@@ -169,7 +210,8 @@
             let credits = team === 'player' ? playerCredits : enemyCredits;
             if (credits >= 500 && this.time.now - factory.lastSpawn > 3000) {
                 let size = Phaser.Math.Between(20, 40);
-                let unit = this.add.rectangle(factory.x + 50, factory.y, size, size, team === 'player' ? 0x0000ff : 0xff0000);
+                let unit = this.add.rectangle(factory.x + 100, factory.y, size, size, 
+                    team === 'player' ? 0xffd700 : 0x8b0000); 
                 unit.health = size * 5;
                 unit.team = team;
                 unit.lastShot = 0;
@@ -215,8 +257,13 @@
             }
         }
 
+        function drawSelectionOutline(entity, color) {
+            this.add.rectangle(entity.x, entity.y, entity.width + 4, entity.height + 4, color, 0.5)
+                .setStrokeStyle(2, 0x0000ff, 1);
+        }
+
         function endGame(message) {
-            this.add.text(400, 300, message, { fontSize: '32px', color: '#fff' }).setOrigin(0.5);
+            this.add.text(800, 600, message, { fontSize: '32px', color: '#fff' }).setOrigin(0.5);
             this.scene.pause();
         }
     </script>
