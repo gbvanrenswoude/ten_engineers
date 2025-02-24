@@ -64,7 +64,6 @@
         let playerUnits = [], enemyUnits = [];
         let ores = [];
 
-        // Menu Logic
         document.getElementById('startButton').addEventListener('click', () => {
             document.getElementById('menu').style.display = 'none';
             game = new Phaser.Game(config);
@@ -75,11 +74,10 @@
                 } else {
                     console.error('Canvas not found after game start.');
                 }
-            }, 100); //  Wiat for canvas to be created
+            }, 100);
         });
 
         function preload() {
-            this.load.image('bullet', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAHElEQVQIW2NkYGD4z8DAwMgABXAG5z8DOQAAAK8DL//oQfQAAAAASUVORK5CYII=');
         }
 
         function create() {
@@ -191,7 +189,7 @@
             if (this.time.now - unit.lastShot > 1000) {
                 let target = targets.find(t => Phaser.Math.Distance.Between(unit.x, unit.y, t.x, t.y) < 200);
                 if (target) {
-                    let bullet = this.add.image(unit.x, unit.y, 'bullet').setScale(2);
+                    let bullet = this.add.rectangle(unit.x, unit.y, 4, 4, 0xffffff);
                     this.tweens.add({
                         targets: bullet,
                         x: target.x,
