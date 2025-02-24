@@ -36,7 +36,7 @@
         |  Right-click: Deselect units       |
         |  Right-click engineer: Factory(2000)|
         |  Win by destroying enemy engineers |
-        |  Hover edges to scroll map         |
+        |  Hover edges to scroll map (Esc to unlock cursor) |
         ======================================
         </pre>
         <button id="startButton">Start Game</button>
@@ -66,7 +66,7 @@
         let playerEngineers = [], enemyEngineers = [], playerFactories = [], enemyFactories = [];
         let playerUnits = [], enemyUnits = [], selectedUnits = [];
         let ores = [], selectionBox = null;
-        let camera; 
+        let camera, isCursorLocked = false;
 
         document.getElementById('startButton').addEventListener('click', () => {
             document.getElementById('menu').style.display = 'none';
@@ -75,6 +75,7 @@
                 let canvas = document.getElementsByTagName('canvas')[0];
                 if (canvas) {
                     canvas.style.display = 'block';
+                    lockCursor(canvas); // Lock cursor when game starts
                 } else {
                     console.error('Canvas not found after game start.');
                 }
@@ -86,7 +87,7 @@
 
         function create() {
             camera = this.cameras.main;
-            camera.setBounds(0, 0, 1600, 1200); 
+            camera.setBounds(0, 0, 1600, 1200);
             camera.setZoom(1);
 
             this.add.rectangle(800, 600, 1600, 1200, 0x006400);
@@ -113,25 +114,33 @@
             }
 
             this.input.on('pointerdown', (pointer) => handleClick.call(this, pointer));
+
+            // Add keyboard input for Esc to unlock cursor
+            this.input.keyboard.on('keydown-ESC', () => {
+                unlockCursor();
+            });
         }
 
         function update() {
-            const edgeThreshold = 50; 
-            const scrollSpeed = 10; 
+            const edgeThreshold = 50;
+            const scrollSpeed = 10;
 
-            if (this.input.activePointer.x < edgeThreshold) {
-                camera.scrollX -= scrollSpeed;
-            } else if (this.input.activePointer.x > config.width - edgeThreshold) {
-                camera.scrollX += scrollSpeed;
-            }
-            if (this.input.activePointer.y < edgeThreshold) {
-                camera.scrollY -= scrollSpeed;
-            } else if (this.input.activePointer.y > config.height - edgeThreshold) {
-                camera.scrollY += scrollSpeed;
-            }
+            if (isCursorLocked) {
+                // Use pointer position within the canvas for scrolling
+                if (this.input.activePointer.x < edgeThreshold) {
+                    camera.scrollX -= scrollSpeed;
+                } else if (this.input.activePointer.x > config.width - edgeThreshold) {
+                    camera.scrollX += scrollSpeed;
+                }
+                if (this.input.activePointer.y < edgeThreshold) {
+                    camera.scrollY -= scrollSpeed;
+                } else if (this.input.activePointer.y > config.height - edgeThreshold) {
+                    camera.scrollY += scrollSpeed;
+                }
 
-            camera.scrollX = Phaser.Math.Clamp(camera.scrollX, 0, 1600 - config.width);
-            camera.scrollY = Phaser.Math.Clamp(camera.scrollY, 0, 1200 - config.height);
+                camera.scrollX = Phaser.Math.Clamp(camera.scrollX, 0, 1600 - config.width);
+                camera.scrollY = Phaser.Math.Clamp(camera.scrollY, 0, 1200 - config.height);
+            }
 
             if (selectionBox) {
                 selectionBox.setSize(this.input.activePointer.x - selectionBox.x, this.input.activePointer.y - selectionBox.y);
@@ -157,46 +166,48 @@
         }
 
         function handleClick(pointer) {
-            if (pointer.leftButtonDown()) {
-                if (!selectionBox) {
-                    selectionBox = this.add.rectangle(pointer.x + camera.scrollX, pointer.y + camera.scrollY, 1, 1, 0x0000ff, 0.5);
-                    selectionBox.isSelecting = true;
-                } else if (selectionBox.isSelecting) {
-                    let x1 = selectionBox.x, y1 = selectionBox.y;
-                    let x2 = pointer.x + camera.scrollX, y2 = pointer.y + camera.scrollY;
-                    let minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-                    let minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
+            if (isCursorLocked) {
+                if (pointer.leftButtonDown()) {
+                    if (!selectionBox) {
+                        selectionBox = this.add.rectangle(pointer.x + camera.scrollX, pointer.y + camera.scrollY, 1, 1, 0x0000ff, 0.5);
+                        selectionBox.isSelecting = true;
+                    } else if (selectionBox.isSelecting) {
+                        let x1 = selectionBox.x, y1 = selectionBox.y;
+                        let x2 = pointer.x + camera.scrollX, y2 = pointer.y + camera.scrollY;
+                        let minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
+                        let minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
 
-                    selectedUnits = [...playerUnits, ...playerEngineers].filter(entity => {
-                        return entity.x >= minX && entity.x <= maxX && entity.y >= minY && entity.y <= maxY;
-                    });
-
-                    selectionBox.destroy();
-                    selectionBox = null;
-                } else {
-                    if (selectedUnits.length > 0) {
-                        let target = { x: pointer.x + camera.scrollX, y: pointer.y + camera.scrollY };
-                        selectedUnits.forEach(entity => {
-                            entity.target = target;
+                        selectedUnits = [...playerUnits, ...playerEngineers].filter(entity => {
+                            return entity.x >= minX && entity.x <= maxX && entity.y >= minY && entity.y <= maxY;
                         });
-                    }
-                }
-            } else if (pointer.rightButtonDown()) {
-                selectedUnits = [];
-                if (selectionBox) {
-                    selectionBox.destroy();
-                    selectionBox = null;
-                }
 
-                let selectedEng = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x + camera.scrollX, pointer.y + camera.scrollY) < 20);
-                if (selectedEng && playerCredits >= 2000) {
-                    let factory = this.add.rectangle(selectedEng.x, selectedEng.y, 40, 40, 0xd3d3a4); 
-                    factory.health = 200;
-                    factory.team = 'player';
-                    factory.lastSpawn = 0;
-                    playerFactories.push(factory);
-                    playerCredits -= 2000;
-                    player.creditsText.setText(`Credits: ${playerCredits}`);
+                        selectionBox.destroy();
+                        selectionBox = null;
+                    } else {
+                        if (selectedUnits.length > 0) {
+                            let target = { x: pointer.x + camera.scrollX, y: pointer.y + camera.scrollY };
+                            selectedUnits.forEach(entity => {
+                                entity.target = target;
+                            });
+                        }
+                    }
+                } else if (pointer.rightButtonDown()) {
+                    selectedUnits = [];
+                    if (selectionBox) {
+                        selectionBox.destroy();
+                        selectionBox = null;
+                    }
+
+                    let selectedEng = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x + camera.scrollX, pointer.y + camera.scrollY) < 20);
+                    if (selectedEng && playerCredits >= 2000) {
+                        let factory = this.add.rectangle(selectedEng.x, selectedEng.y, 40, 40, 0xd3d3a4); // Grey-Yellowish
+                        factory.health = 200;
+                        factory.team = 'player';
+                        factory.lastSpawn = 0;
+                        playerFactories.push(factory);
+                        playerCredits -= 2000;
+                        player.creditsText.setText(`Credits: ${playerCredits}`);
+                    }
                 }
             }
         }
@@ -233,7 +244,7 @@
             if (credits >= 500 && this.time.now - factory.lastSpawn > 3000) {
                 let size = Phaser.Math.Between(20, 40);
                 let unit = this.add.rectangle(factory.x + 100, factory.y, size, size, 
-                    team === 'player' ? 0xffd700 : 0x8b0000); 
+                    team === 'player' ? 0xffd700 : 0x8b0000); // Golden Yellow for player, Dark Red for enemy
                 unit.health = size * 5;
                 unit.team = team;
                 unit.lastShot = 0;
@@ -287,6 +298,27 @@
         function endGame(message) {
             this.add.text(800, 600, message, { fontSize: '32px', color: '#fff' }).setOrigin(0.5);
             this.scene.pause();
+            unlockCursor(); gi
+        }
+
+        function lockCursor(canvas) {
+            canvas.requestPointerLock = canvas.requestPointerLock || canvas.mozRequestPointerLock;
+            canvas.requestPointerLock();
+            isCursorLocked = true;
+            document.addEventListener('pointerlockchange', handlePointerLockChange, false);
+        }
+
+        function unlockCursor() {
+            document.exitPointerLock = document.exitPointerLock || document.mozExitPointerLock;
+            document.exitPointerLock();
+            isCursorLocked = false;
+        }
+
+        function handlePointerLockChange() {
+            isCursorLocked = document.pointerLockElement === document.getElementsByTagName('canvas')[0];
+            if (!isCursorLocked) {
+                console.log('Cursor unlocked');
+            }
         }
     </script>
 </body>
