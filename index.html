@@ -6,7 +6,7 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <style>
         body { margin: 0; background: #000; color: #fff; font-family: monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { border: 1px solid #fff; display: none; }
+        canvas { border: 1px solid #fff; display: none; width: 1600px; height: 1200px; }
         #menu { text-align: center; white-space: pre; font-size: 16px; }
         #startButton { margin-top: 20px; padding: 10px 20px; background: #fff; color: #000; border: none; cursor: pointer; }
         #startButton:hover { background: #ccc; }
@@ -75,7 +75,9 @@
                 let canvas = document.getElementsByTagName('canvas')[0];
                 if (canvas) {
                     canvas.style.display = 'block';
-                    lockCursor(canvas); // Lock cursor when game starts
+                    canvas.focus();
+                    canvas.onclick = () => lockCursor(canvas); 
+                    console.log('Click canvas to lock cursor');
                 } else {
                     console.error('Canvas not found after game start.');
                 }
@@ -117,34 +119,35 @@
             this.input.on('pointerup', (pointer) => handlePointerUp.call(this, pointer));
             this.input.on('pointermove', (pointer) => handlePointerMove.call(this, pointer));
 
-            // Add keyboard input for Esc to unlock cursor
-            this.input.keyboard.on('keydown-ESC', () => {
-                unlockCursor();
-            });
+            this.input.keyboard.on('keydown-ESC', () => unlockCursor());
 
-            // Create a visible cursor graphic (white square)
-            cursorGraphic = this.add.rectangle(0, 0, 10, 10, 0xffffff);
-            cursorGraphic.setScrollFactor(0); // Keep cursor fixed to screen
+            cursorGraphic = this.add.rectangle(0, 0, 10, 10, 0xffffff).setDepth(100);
+            cursorGraphic.setScrollFactor(0);
         }
 
         function update() {
             const edgeThreshold = 50;
             const scrollSpeed = 10;
 
+            console.log('Pointer:', this.input.activePointer.x, this.input.activePointer.y);
+            console.log('Locked:', isCursorLocked);
+
             if (isCursorLocked) {
-                // Update cursor graphic position
                 cursorGraphic.x = this.input.activePointer.x;
                 cursorGraphic.y = this.input.activePointer.y;
 
-                // Scroll based on mouse position near edges
                 if (this.input.activePointer.x < edgeThreshold) {
+                    console.log('Scroll Left');
                     camera.scrollX -= scrollSpeed;
                 } else if (this.input.activePointer.x > config.width - edgeThreshold) {
+                    console.log('Scroll Right');
                     camera.scrollX += scrollSpeed;
                 }
                 if (this.input.activePointer.y < edgeThreshold) {
+                    console.log('Scroll Up');
                     camera.scrollY -= scrollSpeed;
                 } else if (this.input.activePointer.y > config.height - edgeThreshold) {
+                    console.log('Scroll Down');
                     camera.scrollY += scrollSpeed;
                 }
 
@@ -224,7 +227,6 @@
 
         function handlePointerMove(pointer) {
             if (isCursorLocked) {
-                // Update cursor graphic position (already handled in update, but keeping for redundancy)
                 cursorGraphic.x = pointer.x;
                 cursorGraphic.y = pointer.y;
             }
@@ -334,9 +336,7 @@
 
         function handlePointerLockChange() {
             isCursorLocked = document.pointerLockElement === document.getElementsByTagName('canvas')[0];
-            if (!isCursorLocked) {
-                console.log('Cursor unlocked');
-            }
+            console.log('Pointer Lock State:', isCursorLocked);
         }
     </script>
 </body>
