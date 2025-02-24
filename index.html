@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple RTS Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body { margin: 0; background: #222; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { border: 1px solid #fff; }
+    </style>
+</head>
+<body>
+    <script>
+        const config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 600,
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            },
+            physics: {
+                default: 'arcade',
+                arcade: { debug: false }
+            }
+        };
+
+        const game = new Phaser.Game(config);
+        let player, enemy, playerCredits = 10000, enemyCredits = 10000;
+        let playerEngineers = [], enemyEngineers = [], playerFactories = [], enemyFactories = [];
+        let playerUnits = [], enemyUnits = [];
+        let ores = [];
+
+        function preload() {
+            this.load.image('bullet', 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAHElEQVQIW2NkYGD4z8DAwMgABXAG5z8DOQAAAK8DL//oQfQAAAAASUVORK5CYII=');
+        }
+
+        function create() {
+            // Background
+            this.add.rectangle(400, 300, 800, 600, 0x4a4a4a);
+
+            // UI
+            player = { creditsText: this.add.text(10, 10, `Credits: ${playerCredits}`, { color: '#fff' }) };
+            enemy = { creditsText: this.add.text(10, 30, `Enemy Credits: ${enemyCredits}`, { color: '#fff' }) };
+
+            // Spawn Engineers (Yellow Blocks)
+            for (let i = 0; i < 10; i++) {
+                let eng = this.add.rectangle(50 + i * 30, 500, 20, 20, 0xffff00);
+                eng.health = 50;
+                eng.team = 'player';
+                playerEngineers.push(eng);
+
+                let enemyEng = this.add.rectangle(50 + i * 30, 100, 20, 20, 0xffff00);
+                enemyEng.health = 50;
+                enemyEng.team = 'enemy';
+                enemyEngineers.push(enemyEng);
+            }
+
+            // Ore Patches
+            for (let i = 0; i < 5; i++) {
+                let ore = this.add.rectangle(Phaser.Math.Between(200, 600), Phaser.Math.Between(200, 400), 30, 30, 0xaaaaaa);
+                ore.resource = 1000;
+                ores.push(ore);
+            }
+
+            // Mouse Input
+            this.input.on('pointerdown', (pointer) => handleClick.call(this, pointer));
+        }
+
+        function update() {
+            // Engineer Mining
+            playerEngineers.forEach(eng => mineOre.call(this, eng, 'player'));
+            enemyEngineers.forEach(eng => mineOre.call(this, eng, 'enemy'));
+
+            // Unit Combat
+            playerUnits.forEach(unit => fireBullet.call(this, unit, enemyUnits.concat(enemyEngineers)));
+            enemyUnits.forEach(unit => fireBullet.call(this, unit, playerUnits.concat(playerEngineers)));
+
+            // Factory Production
+            playerFactories.forEach(factory => produceUnit.call(this, factory, 'player'));
+            enemyFactories.forEach(factory => produceUnit.call(this, factory, 'enemy'));
+
+            // Check Game Over
+            if (playerEngineers.length === 0) endGame('Enemy Wins!');
+            if (enemyEngineers.length === 0) endGame('Player Wins!');
+        }
+
+        function handleClick(pointer) {
+            let selected = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x, pointer.y) < 20);
+            if (selected) {
+                if (pointer.rightButtonDown()) {
+                    // Build Factory (Costs 2000 credits)
+                    if (playerCredits >= 2000) {
+                        let factory = this.add.rectangle(selected.x, selected.y, 40, 40, 0x00ff00);
+                        factory.health = 200;
+                        factory.team = 'player';
+                        factory.lastSpawn = 0;
+                        playerFactories.push(factory);
+                        playerCredits -= 2000;
+                        player.creditsText.setText(`Credits: ${playerCredits}`);
+                    }
+                } else {
+                    // Move to Ore or Position
+                    let targetOre = ores.find(ore => Phaser.Math.Distance.Between(ore.x, ore.y, pointer.x, pointer.y) < 30);
+                    selected.target = targetOre || { x: pointer.x, y: pointer.y };
+                }
+            }
+        }
+
+        function mineOre(eng, team) {
+            if (eng.target && !eng.mining) {
+                let dist = Phaser.Math.Distance.Between(eng.x, eng.y, eng.target.x, eng.target.y);
+                if (dist > 20) {
+                    let angle = Phaser.Math.Angle.Between(eng.x, eng.y, eng.target.x, eng.target.y);
+                    eng.x += Math.cos(angle) * 2;
+                    eng.y += Math.sin(angle) * 2;
+                } else if (eng.target.resource) {
+                    eng.mining = true;
+                    this.time.delayedCall(1000, () => {
+                        if (eng.target.resource > 0) {
+                            eng.target.resource -= 10;
+                            if (team === 'player') {
+                                playerCredits += 10;
+                                player.creditsText.setText(`Credits: ${playerCredits}`);
+                            } else {
+                                enemyCredits += 10;
+                                enemy.creditsText.setText(`Enemy Credits: ${enemyCredits}`);
+                            }
+                            if (eng.target.resource <= 0) ores = ores.filter(o => o !== eng.target);
+                        }
+                        eng.mining = false;
+                    });
+                }
+            }
+        }
+
+        function produceUnit(factory, team) {
+            let credits = team === 'player' ? playerCredits : enemyCredits;
+            if (credits >= 500 && this.time.now - factory.lastSpawn > 3000) {
+                let size = Phaser.Math.Between(20, 40);
+                let unit = this.add.rectangle(factory.x + 50, factory.y, size, size, team === 'player' ? 0x0000ff : 0xff0000);
+                unit.health = size * 5;
+                unit.team = team;
+                unit.lastShot = 0;
+                (team === 'player' ? playerUnits : enemyUnits).push(unit);
+                if (team === 'player') {
+                    playerCredits -= 500;
+                    player.creditsText.setText(`Credits: ${playerCredits}`);
+                } else {
+                    enemyCredits -= 500;
+                    enemy.creditsText.setText(`Enemy Credits: ${enemyCredits}`);
+                }
+                factory.lastSpawn = this.time.now;
+            }
+        }
+
+        function fireBullet(unit, targets) {
+            if (this.time.now - unit.lastShot > 1000) {
+                let target = targets.find(t => Phaser.Math.Distance.Between(unit.x, unit.y, t.x, t.y) < 200);
+                if (target) {
+                    let bullet = this.add.image(unit.x, unit.y, 'bullet').setScale(2);
+                    this.tweens.add({
+                        targets: bullet,
+                        x: target.x,
+                        y: target.y,
+                        duration: 500,
+                        onComplete: () => {
+                            bullet.destroy();
+                            target.health -= 10;
+                            if (target.health <= 0) {
+                                target.destroy();
+                                if (target.team === 'player') {
+                                    if (playerUnits.includes(target)) playerUnits = playerUnits.filter(u => u !== target);
+                                    else playerEngineers = playerEngineers.filter(e => e !== target);
+                                } else {
+                                    if (enemyUnits.includes(target)) enemyUnits = enemyUnits.filter(u => u !== target);
+                                    else enemyEngineers = enemyEngineers.filter(e => e !== target);
+                                }
+                            }
+                        }
+                    });
+                    unit.lastShot = this.time.now;
+                }
+            }
+        }
+
+        function endGame(message) {
+            this.add.text(400, 300, message, { fontSize: '32px', color: '#fff' }).setOrigin(0.5);
+            this.scene.pause();
+        }
+    </script>
+</body>
+</html>
