@@ -36,6 +36,7 @@
         |  Right-click: Deselect units       |
         |  Right-click engineer: Factory(2000)|
         |  Win by destroying enemy engineers |
+        |  Hover edges to scroll map         |
         ======================================
         </pre>
         <button id="startButton">Start Game</button>
@@ -48,8 +49,8 @@
 
         const config = {
             type: Phaser.AUTO,
-            width: 1600, 
-            height: 1200, 
+            width: 1600,
+            height: 1200,
             scene: {
                 preload: preload,
                 create: create,
@@ -63,8 +64,9 @@
 
         let game, player, enemy, playerCredits = 10000, enemyCredits = 10000;
         let playerEngineers = [], enemyEngineers = [], playerFactories = [], enemyFactories = [];
-        let playerUnits = [], enemyUnits = [], selectedUnits = []; 
+        let playerUnits = [], enemyUnits = [], selectedUnits = [];
         let ores = [], selectionBox = null;
+        let camera; 
 
         document.getElementById('startButton').addEventListener('click', () => {
             document.getElementById('menu').style.display = 'none';
@@ -83,25 +85,28 @@
         }
 
         function create() {
+            camera = this.cameras.main;
+            camera.setBounds(0, 0, 1600, 1200); 
+            camera.setZoom(1);
+
             this.add.rectangle(800, 600, 1600, 1200, 0x006400);
 
-            // UI
-            player = { creditsText: this.add.text(10, 10, `Credits: ${playerCredits}`, { color: '#fff' }) };
-            enemy = { creditsText: this.add.text(10, 30, `Enemy Credits: ${enemyCredits}`, { color: '#fff' }) };
+            player = { creditsText: this.add.text(10, 10, `Credits: ${playerCredits}`, { color: '#fff' }).setScrollFactor(0) };
+            enemy = { creditsText: this.add.text(10, 30, `Enemy Credits: ${enemyCredits}`, { color: '#fff' }).setScrollFactor(0) };
 
             for (let i = 0; i < 10; i++) {
-                let eng = this.add.rectangle(100 + i * 60, 1100, 20, 20, 0xffff00); 
+                let eng = this.add.rectangle(100 + i * 60, 1100, 20, 20, 0xffff00); // Golden Yellow
                 eng.health = 50;
                 eng.team = 'player';
                 playerEngineers.push(eng);
 
-                let enemyEng = this.add.rectangle(100 + i * 60, 100, 20, 20, 0xff0000); 
+                let enemyEng = this.add.rectangle(100 + i * 60, 100, 20, 20, 0xff0000); // Bright Red
                 enemyEng.health = 50;
                 enemyEng.team = 'enemy';
                 enemyEngineers.push(enemyEng);
             }
 
-            for (let i = 0; i < 10; i++) { 
+            for (let i = 0; i < 10; i++) { // Brown ore
                 let ore = this.add.rectangle(Phaser.Math.Between(200, 1400), Phaser.Math.Between(200, 1000), 30, 30, 0x8b4513);
                 ore.resource = 1000;
                 ores.push(ore);
@@ -111,6 +116,23 @@
         }
 
         function update() {
+            const edgeThreshold = 50; 
+            const scrollSpeed = 10; 
+
+            if (this.input.activePointer.x < edgeThreshold) {
+                camera.scrollX -= scrollSpeed;
+            } else if (this.input.activePointer.x > config.width - edgeThreshold) {
+                camera.scrollX += scrollSpeed;
+            }
+            if (this.input.activePointer.y < edgeThreshold) {
+                camera.scrollY -= scrollSpeed;
+            } else if (this.input.activePointer.y > config.height - edgeThreshold) {
+                camera.scrollY += scrollSpeed;
+            }
+
+            camera.scrollX = Phaser.Math.Clamp(camera.scrollX, 0, 1600 - config.width);
+            camera.scrollY = Phaser.Math.Clamp(camera.scrollY, 0, 1200 - config.height);
+
             if (selectionBox) {
                 selectionBox.setSize(this.input.activePointer.x - selectionBox.x, this.input.activePointer.y - selectionBox.y);
             }
@@ -137,11 +159,11 @@
         function handleClick(pointer) {
             if (pointer.leftButtonDown()) {
                 if (!selectionBox) {
-                    selectionBox = this.add.rectangle(pointer.x, pointer.y, 1, 1, 0x0000ff, 0.5);
+                    selectionBox = this.add.rectangle(pointer.x + camera.scrollX, pointer.y + camera.scrollY, 1, 1, 0x0000ff, 0.5);
                     selectionBox.isSelecting = true;
                 } else if (selectionBox.isSelecting) {
                     let x1 = selectionBox.x, y1 = selectionBox.y;
-                    let x2 = pointer.x, y2 = pointer.y;
+                    let x2 = pointer.x + camera.scrollX, y2 = pointer.y + camera.scrollY;
                     let minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
                     let minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
 
@@ -153,7 +175,7 @@
                     selectionBox = null;
                 } else {
                     if (selectedUnits.length > 0) {
-                        let target = { x: pointer.x, y: pointer.y };
+                        let target = { x: pointer.x + camera.scrollX, y: pointer.y + camera.scrollY };
                         selectedUnits.forEach(entity => {
                             entity.target = target;
                         });
@@ -166,7 +188,7 @@
                     selectionBox = null;
                 }
 
-                let selectedEng = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x, pointer.y) < 20);
+                let selectedEng = playerEngineers.find(eng => Phaser.Math.Distance.Between(eng.x, eng.y, pointer.x + camera.scrollX, pointer.y + camera.scrollY) < 20);
                 if (selectedEng && playerCredits >= 2000) {
                     let factory = this.add.rectangle(selectedEng.x, selectedEng.y, 40, 40, 0xd3d3a4); 
                     factory.health = 200;
